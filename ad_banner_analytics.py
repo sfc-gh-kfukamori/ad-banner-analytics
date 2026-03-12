@@ -1532,126 +1532,63 @@ def page_advisor():
                             f"CPA: ¥{fmt_num(row.get('CPA_JPY', 0))}"
                         )
 
-    # --- 分析タイプ選択 ---
+    # --- 自由記述の質問入力（RAG） ---
     st.divider()
-    analysis_type = st.selectbox(
-        "分析・提案タイプ",
-        [
-            "総合改善提案",
-            "クリエイティブ改善",
-            "ターゲティング最適化",
-            "A/Bテスト設計提案",
-            "予算配分最適化",
-        ]
-    )
-
-    # --- 過去ナレッジ参照オプション ---
-    use_knowledge = st.checkbox(
-        "過去の社内ナレッジを参照して提案を強化する（Cortex Search）",
-        value=False,
-        key="advisor_use_knowledge"
+    advisor_question = st.text_area(
+        "質問・相談したいこと（自由記述）",
+        placeholder="例: CTAの色を暖色系に変えたらCVRは上がりますか？モバイル向けの最適なレイアウトは？予算配分をどう見直すべき？",
+        height=100,
+        key="advisor_question"
     )
 
     # --- プロンプト構築 ---
     prompt_context = _build_advisor_context(campaign_info, campaign_banners, campaign_perf)
 
-    prompt_map = {
-        "総合改善提案": f"""
-以下の広告キャンペーンデータを分析し、総合的な改善提案を日本語で作成してください。
-
-{prompt_context}
-
-以下の観点で提案してください:
-1. 現状の評価（強み・弱みの分析）
-2. クリエイティブの改善ポイント（具体的に3つ以上）
-3. ターゲティングの最適化提案
-4. 次に実施すべきA/Bテストの提案
-5. 予算配分の見直し提案
-6. 短期（1週間）・中期（1ヶ月）のアクションプラン
-""",
-        "クリエイティブ改善": f"""
-以下の広告バナーのクリエイティブを分析し、改善提案を日本語で作成してください。
-
-{prompt_context}
-
-以下の観点で詳細に分析・提案してください:
-1. 現在のデザインスタイル・訴求タイプの効果分析
-2. 色彩設計の改善提案（CTA色、背景色、コントラスト）
-3. コピーライティングの改善（見出し、CTAテキスト）
-4. レイアウト・構成の改善提案
-5. バナーサイズ別の最適化ポイント
-6. 競合との差別化ポイント
-""",
-        "ターゲティング最適化": f"""
-以下の広告キャンペーンの配信データを分析し、ターゲティング最適化提案を日本語で作成してください。
-
-{prompt_context}
-
-以下の観点で分析・提案してください:
-1. デバイス別パフォーマンスの傾向と最適配分
-2. 地域別パフォーマンスの傾向と配信ウェイト調整
-3. 曜日・時間帯別の配信最適化（データから推測）
-4. オーディエンスセグメントの拡張・絞り込み提案
-5. リターゲティング戦略の提案
-""",
-        "A/Bテスト設計提案": f"""
-以下の広告キャンペーンの現在のパフォーマンスを踏まえ、次のA/Bテスト計画を日本語で提案してください。
-
-{prompt_context}
-
-以下の観点で提案してください:
-1. 最も効果が期待できるテスト変数の特定とその理由
-2. 具体的なバリエーション案（A案/B案の詳細）
-3. テスト期間と必要サンプルサイズの目安
-4. 成功指標（KPI）の設定
-5. テスト後のスケーリング戦略
-6. 3回のテストロードマップ（段階的最適化）
-""",
-        "予算配分最適化": f"""
-以下の広告キャンペーンのパフォーマンスデータを基に、予算配分の最適化提案を日本語で作成してください。
-
-{prompt_context}
-
-以下の観点で分析・提案してください:
-1. 現在の予算消化率と効率性の評価
-2. バナー別のROAS（費用対効果）分析
-3. パフォーマンスに基づく理想的な予算配分比率
-4. 低パフォーマンスバナーの停止/改善判断基準
-5. 追加予算が確保できた場合の投資優先順位
-6. 月別の予算ペーシング計画
-""",
-    }
-
     # --- AI提案生成 ---
     if st.button("AI提案を生成", type="primary"):
-        prompt = prompt_map[analysis_type]
+        if not advisor_question.strip():
+            st.warning("質問を入力してください。")
+            st.stop()
 
-        # ナレッジ参照が有効な場合、関連知見を検索してプロンプトに追加
+        # ユーザーの質問文で関連ナレッジを動的検索（RAG）
         knowledge_count = 0
-        if use_knowledge:
-            with st.spinner("過去ナレッジを検索中..."):
-                search_q = f"{campaign_info['INDUSTRY']} {analysis_type} バナー広告 改善"
-                knowledge_results = search_knowledge_base(search_q, limit=5)
-                knowledge_count = len(knowledge_results)
-                if knowledge_results:
-                    knowledge_text = format_knowledge_context(knowledge_results)
-                    prompt = prompt + f"""
+        with st.spinner("過去ナレッジを検索中..."):
+            knowledge_results = search_knowledge_base(advisor_question.strip(), limit=5)
+            knowledge_count = len(knowledge_results)
+            if knowledge_results:
+                knowledge_text = format_knowledge_context(knowledge_results)
+                st.info(f"{knowledge_count}件の過去ナレッジを参照して提案を強化します")
+                with st.expander("参照ナレッジ一覧", expanded=False):
+                    for r in knowledge_results:
+                        st.caption(f"- [{r.get('DOC_TITLE', '')}] {r.get('CHUNK_TEXT', '')[:80]}...")
+            else:
+                knowledge_text = ""
+                st.caption("関連する過去ナレッジが見つかりませんでした。一般的な知識で提案します。")
 
-また、以下の過去の社内分析ナレッジも参考にして、会社独自の経験に基づいた具体的な提案を追加してください。
-過去ナレッジの数値やパターンを引用し、根拠のある提案としてください。
+        prompt = f"""あなたは広告バナー最適化の専門アナリストです。
+以下のキャンペーンデータと過去の社内ナレッジを参考に、ユーザーの質問に具体的に回答してください。
 
-{knowledge_text}
+【ユーザーの質問】
+{advisor_question}
+
+【現在のキャンペーンデータ】
+{prompt_context}
+
+【過去の社内分析ナレッジ（類似業界・類似施策の実績データ）】
+{knowledge_text if knowledge_text else "（該当する過去ナレッジなし）"}
+
+以下の構成で回答してください:
+1. 質問に対する直接的な回答
+2. 現在のキャンペーンデータからの分析根拠
+3. 過去ナレッジからの示唆（該当する事例や数値を引用）
+4. 具体的な改善提案とアクションプラン
+5. 定量的な改善見込み（過去実績に基づく期待値）
+
+過去ナレッジの具体的な数値や事例を引用しながら、根拠のある提案をしてください。
 """
-                    st.info(f"{knowledge_count}件の過去ナレッジを参照して提案を強化します")
-                    with st.expander("参照ナレッジ一覧", expanded=False):
-                        for r in knowledge_results:
-                            st.caption(f"- [{r.get('DOC_TITLE', '')}] {r.get('CHUNK_TEXT', '')[:80]}...")
-                else:
-                    st.caption("関連する過去ナレッジが見つかりませんでした。一般的な知識で提案します。")
 
-        with st.spinner(f"AI_COMPLETEで{analysis_type}を生成中..."):
+        with st.spinner("AI_COMPLETEで提案を生成中..."):
             try:
-                # エスケープ処理
                 escaped_prompt = prompt.replace("'", "''")
                 sql = f"""
                     SELECT AI_COMPLETE(
@@ -1663,8 +1600,8 @@ def page_advisor():
                 advice = result.iloc[0]["ADVICE"].replace("\\n", "\n")
 
                 st.divider()
-                st.subheader(f"AI提案: {analysis_type}")
-                if use_knowledge and knowledge_count > 0:
+                st.subheader("AI提案")
+                if knowledge_count > 0:
                     st.caption(f"(過去ナレッジ{knowledge_count}件を参照)")
                 st.markdown(advice)
 
@@ -1673,9 +1610,9 @@ def page_advisor():
                     st.session_state.advisor_history = []
                 st.session_state.advisor_history.append({
                     "campaign": campaign_info["CAMPAIGN_NAME"],
-                    "type": analysis_type,
+                    "question": advisor_question,
                     "advice": advice,
-                    "knowledge_used": knowledge_count if use_knowledge else 0,
+                    "knowledge_used": knowledge_count,
                 })
             except Exception as e:
                 st.error(f"AI_COMPLETE実行エラー: {e}")
@@ -1685,8 +1622,9 @@ def page_advisor():
         st.divider()
         st.subheader("過去の提案履歴")
         for i, h in enumerate(reversed(st.session_state.advisor_history)):
+            q_label = h.get("question", h.get("type", ""))[:40]
             kb_label = f" +ナレッジ{h.get('knowledge_used', 0)}件" if h.get("knowledge_used") else ""
-            with st.expander(f"[{h['campaign']}] {h['type']}{kb_label}", expanded=False):
+            with st.expander(f"[{h['campaign']}] {q_label}...{kb_label}", expanded=False):
                 st.markdown(h["advice"])
 
 
