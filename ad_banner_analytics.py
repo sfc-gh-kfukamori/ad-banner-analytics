@@ -1834,35 +1834,19 @@ def page_knowledge_rag():
 - バナー数: {len(campaign_banners)}
         """)
 
-        # 分析テーマ選択
-        analysis_theme = st.selectbox(
-            "分析テーマ",
-            [
-                "クリエイティブ改善（色彩・レイアウト・CTA）",
-                "ターゲティング最適化（デバイス・地域・時間帯）",
-                "CPA改善戦略（導線・訴求・信頼性）",
-                "A/Bテスト計画（過去の成功事例ベース）",
-                "総合改善提案（全ナレッジ横断）",
-            ],
-            key="rag_analysis_theme"
+        # 自由記述の質問入力
+        user_question = st.text_area(
+            "質問・分析したいこと（自由記述）",
+            placeholder="例: このキャンペーンのCTAボタンの色をオレンジに変えたらCVRは改善しますか？過去に似た施策はありますか？",
+            height=100,
+            key="rag_user_question"
         )
 
-        # テーマに基づく検索クエリの自動生成
-        theme_queries = {
-            "クリエイティブ改善（色彩・レイアウト・CTA）":
-                f"{campaign_info['INDUSTRY']} バナー CTA色 レイアウト クリエイティブ改善 CTR CVR",
-            "ターゲティング最適化（デバイス・地域・時間帯）":
-                f"{campaign_info['INDUSTRY']} デバイス別 地域 時間帯 ターゲティング CPA最適化",
-            "CPA改善戦略（導線・訴求・信頼性）":
-                f"CPA改善 コンバージョン導線 信頼性訴求 CTA文言 CVR向上",
-            "A/Bテスト計画（過去の成功事例ベース）":
-                f"A/Bテスト 成功事例 バリエーション テスト変数 {campaign_info['INDUSTRY']}",
-            "総合改善提案（全ナレッジ横断）":
-                f"{campaign_info['INDUSTRY']} 広告バナー 改善 CTA 訴求 デバイス CVR CTR CPA",
-        }
-
         if st.button("ナレッジ強化AI分析を実行", type="primary", key="btn_rag_analysis"):
-            search_q = theme_queries[analysis_theme]
+            if not user_question.strip():
+                st.warning("質問を入力してください。")
+                st.stop()
+            search_q = user_question.strip()
 
             with st.spinner("Step 1/3: 関連ナレッジを検索中..."):
                 knowledge_results = search_knowledge_base(search_q, limit=5)
@@ -1879,7 +1863,10 @@ def page_knowledge_rag():
 
             with st.spinner("Step 3/3: AI_COMPLETEでナレッジ強化分析を生成中..."):
                 rag_prompt = f"""あなたは広告バナー最適化の専門アナリストです。
-以下の2つの情報源を組み合わせて、「{analysis_theme}」について具体的な改善提案を日本語で作成してください。
+以下の2つの情報源を組み合わせて、ユーザーの質問に具体的に回答してください。
+
+【ユーザーの質問】
+{user_question}
 
 【情報源1: 現在のキャンペーンデータ】
 {campaign_context}
@@ -1904,7 +1891,7 @@ def page_knowledge_rag():
                     advice = result.iloc[0]["ADVICE"].replace("\\n", "\n")
 
                     st.divider()
-                    st.subheader(f"ナレッジ強化AI分析: {analysis_theme}")
+                    st.subheader("ナレッジ強化AI分析結果")
                     st.markdown(advice)
 
                     # セッションに保存
@@ -1912,7 +1899,7 @@ def page_knowledge_rag():
                         st.session_state.rag_history = []
                     st.session_state.rag_history.append({
                         "campaign": campaign_info["CAMPAIGN_NAME"],
-                        "theme": analysis_theme,
+                        "question": user_question,
                         "advice": advice,
                         "knowledge_count": len(knowledge_results),
                     })
@@ -1925,7 +1912,7 @@ def page_knowledge_rag():
             st.subheader("過去のナレッジ強化分析履歴")
             for i, h in enumerate(reversed(st.session_state.rag_history)):
                 with st.expander(
-                    f"[{h['campaign']}] {h['theme']} (参照ナレッジ: {h['knowledge_count']}件)",
+                    f"[{h['campaign']}] {h.get('question', h.get('theme', ''))[:40]}... (参照ナレッジ: {h['knowledge_count']}件)",
                     expanded=False
                 ):
                     st.markdown(h["advice"])
