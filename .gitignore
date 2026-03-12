@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+
+# Generated assets (re-generate with scripts)
+banners/
+knowledge_pdfs/
+
+# Large font file (download manually, see README)
+fonts/
+
+# IDE
+.vscode/
+.idea/
+*.swp
