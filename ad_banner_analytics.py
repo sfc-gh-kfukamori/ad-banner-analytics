@@ -1540,6 +1540,7 @@ def page_advisor():
         height=100,
         key="advisor_question"
     )
+    advisor_knowledge_limit = st.slider("参照ナレッジ数", min_value=1, max_value=10, value=5, key="advisor_knowledge_limit")
 
     # --- プロンプト構築 ---
     prompt_context = _build_advisor_context(campaign_info, campaign_banners, campaign_perf)
@@ -1553,7 +1554,7 @@ def page_advisor():
         # ユーザーの質問文で関連ナレッジを動的検索（RAG）
         knowledge_count = 0
         with st.spinner("過去ナレッジを検索中..."):
-            knowledge_results = search_knowledge_base(advisor_question.strip(), limit=5)
+            knowledge_results = search_knowledge_base(advisor_question.strip(), limit=advisor_knowledge_limit)
             knowledge_count = len(knowledge_results)
             if knowledge_results:
                 knowledge_text = format_knowledge_context(knowledge_results)
@@ -1779,6 +1780,7 @@ def page_knowledge_rag():
             height=100,
             key="rag_user_question"
         )
+        rag_knowledge_limit = st.slider("参照ナレッジ数", min_value=1, max_value=10, value=5, key="rag_knowledge_limit")
 
         if st.button("ナレッジ強化AI分析を実行", type="primary", key="btn_rag_analysis"):
             if not user_question.strip():
@@ -1787,7 +1789,7 @@ def page_knowledge_rag():
             search_q = user_question.strip()
 
             with st.spinner("Step 1/3: 関連ナレッジを検索中..."):
-                knowledge_results = search_knowledge_base(search_q, limit=5)
+                knowledge_results = search_knowledge_base(search_q, limit=rag_knowledge_limit)
                 knowledge_context = format_knowledge_context(knowledge_results)
 
             if knowledge_results:
