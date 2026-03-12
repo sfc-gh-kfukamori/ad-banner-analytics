@@ -108,10 +108,16 @@ hr {
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
 }
-section[data-testid="stSidebar"] .stRadio label {
-    color: #e0e0e0 !important;
+section[data-testid="stSidebar"] .stRadio label,
+section[data-testid="stSidebar"] .stRadio label span,
+section[data-testid="stSidebar"] .stRadio label div,
+section[data-testid="stSidebar"] .stRadio label p {
+    color: #ffffff !important;
 }
-section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] header {
+section[data-testid="stSidebar"] h2,
+section[data-testid="stSidebar"] header,
+section[data-testid="stSidebar"] span,
+section[data-testid="stSidebar"] p {
     color: #ffffff !important;
 }
 </style>
@@ -752,19 +758,22 @@ def page_ai_image():
         if st.button("クリエイティブレビュー実行", key="run_creative_review"):
             with st.spinner("AI_COMPLETEで画像を分析中..."):
                 try:
-                    review_sql = f"""
-                        SELECT AI_COMPLETE(
-                            '{LLM_MODEL}',
-                            'この広告バナー画像を以下の観点で詳細に分析してください（日本語で回答）:
-                            1. 色彩構成とブランドイメージへの影響
-                            2. レイアウト構成とユーザーの視線誘導
-                            3. テキストの可読性とメッセージの明確さ
-                            4. CTAボタンの視認性と訴求力
-                            5. 全体的な広告効果の評価（5段階）
-                            6. 具体的な改善提案（3つ以上）',
-                            TO_FILE('{STAGE_NAME}', '{banner_row["IMAGE_PATH"]}')
-                        ) AS REVIEW
-                    """
+                    review_prompt = (
+                        "この広告バナー画像を以下の観点で詳細に分析してください（日本語で回答）:\\n"
+                        "1. 色彩構成とブランドイメージへの影響\\n"
+                        "2. レイアウト構成とユーザーの視線誘導\\n"
+                        "3. テキストの可読性とメッセージの明確さ\\n"
+                        "4. CTAボタンの視認性と訴求力\\n"
+                        "5. 全体的な広告効果の評価（5段階）\\n"
+                        "6. 具体的な改善提案（3つ以上）\\n\\n"
+                        "画像: {0}"
+                    ).replace("'", "''")
+                    review_sql = (
+                        f"SELECT AI_COMPLETE('{LLM_MODEL}',"
+                        f" PROMPT('{review_prompt}',"
+                        f" TO_FILE('{STAGE_NAME}', '{banner_row['IMAGE_PATH']}')"
+                        f")) AS REVIEW"
+                    )
                     result = run_query(review_sql)
                     review_text = result.iloc[0]["REVIEW"]
                     # \nリテラルを実際の改行に変換して表示
@@ -1016,26 +1025,44 @@ def page_ai_image():
                 total = len(df_banners)
                 for idx, (_, brow) in enumerate(df_banners.iterrows()):
                     try:
-                        extract_sql = f"""
-                            SELECT AI_COMPLETE(
-                                '{LLM_MODEL}',
-                                'この広告バナー画像を分析し、以下のJSON形式のみで回答してください。説明文は不要です。
-{{"dominant_color":"メインカラー名","color_warmth":"暖色/寒色/中性色","has_person":"true/false","text_amount":"多い/普通/少ない","layout":"左寄せ/中央/右寄せ/分割","emotional_tone":"安心/興奮/高級/親しみ/クール","cta_prominence":"高/中/低","visual_complexity":"シンプル/標準/複雑"}}',
-                                TO_FILE('{STAGE_NAME}', '{brow["IMAGE_PATH"]}')
-                            ) AS ELEMENTS
-                        """
+                        prompt_text = (
+                            "この広告バナー画像を分析し、以下の8項目をそれぞれ1行で回答してください。"
+                            "各行は「項目名:値」の形式で、余計な説明は不要です。\\n"
+                            "dominant_color:メインカラー名\\n"
+                            "color_warmth:暖色 or 寒色 or 中性色\\n"
+                            "has_person:true or false\\n"
+                            "text_amount:多い or 普通 or 少ない\\n"
+                            "layout:左寄せ or 中央 or 右寄せ or 分割\\n"
+                            "emotional_tone:安心 or 興奮 or 高級 or 親しみ or クール\\n"
+                            "cta_prominence:高 or 中 or 低\\n"
+                            "visual_complexity:シンプル or 標準 or 複雑\\n\\n"
+                            "画像: {0}"
+                        ).replace("'", "''")
+                        extract_sql = (
+                            f"SELECT AI_COMPLETE('{LLM_MODEL}',"
+                            f" PROMPT('{prompt_text}',"
+                            f" TO_FILE('{STAGE_NAME}', '{brow['IMAGE_PATH']}')"
+                            f")) AS ELEMENTS"
+                        )
                         res = session.sql(extract_sql).to_pandas()
-                        raw = res.iloc[0]["ELEMENTS"].replace("\\n", "").strip()
-                        # JSON部分を抽出
-                        start = raw.find("{")
-                        end = raw.rfind("}") + 1
-                        if start >= 0 and end > start:
-                            parsed = json.loads(raw[start:end])
+                        raw = res.iloc[0]["ELEMENTS"].replace("\\n", "\n").strip()
+                        # key:value 形式をパース
+                        parsed = {}
+                        for line in raw.split("\n"):
+                            line = line.strip().lstrip("- ")
+                            if ":" in line:
+                                key, val = line.split(":", 1)
+                                key = key.strip().lower().replace(" ", "_")
+                                if key in ("dominant_color", "color_warmth", "has_person",
+                                           "text_amount", "layout", "emotional_tone",
+                                           "cta_prominence", "visual_complexity"):
+                                    parsed[key] = val.strip()
+                        if parsed:
                             parsed["BANNER_ID"] = brow["BANNER_ID"]
                             parsed["BANNER_NAME"] = brow["BANNER_NAME"]
                             elements_list.append(parsed)
                         else:
-                            errors.append(f"{brow['BANNER_NAME']}: JSONが見つかりません")
+                            errors.append(f"{brow['BANNER_NAME']}: パース失敗 - {raw[:100]}")
                     except Exception as e:
                         errors.append(f"{brow['BANNER_NAME']}: {str(e)[:80]}")
                     progress.progress((idx + 1) / total)
@@ -1182,9 +1209,9 @@ def page_ai_image():
     # ==========================================================================
     if has_images:
         st.divider()
-        st.subheader("9. AI_FILTER - 自然言語バナー絞り込み")
+        st.subheader("9. AI_COMPLETE - 自然言語バナー絞り込み")
         st.caption(
-            "自然言語の条件を指定して、マッチするバナーをAI_FILTERで自動抽出します"
+            "自然言語の条件を指定して、マッチするバナーをAIで自動抽出します"
         )
 
         # プリセット条件
@@ -1212,20 +1239,27 @@ def page_ai_image():
         )
 
         if st.button("バナー絞り込み実行", key="run_ai_filter") and filter_condition:
-            with st.spinner(f"AI_FILTERで「{filter_condition}」に該当するバナーを検索中..."):
+            with st.spinner(f"AI_COMPLETEで「{filter_condition}」に該当するバナーを検索中..."):
                 matched_banners = []
                 progress3 = st.progress(0)
                 total3 = len(df_banners)
+                escaped_cond = filter_condition.replace("'", "''")
                 for idx, (_, brow) in enumerate(df_banners.iterrows()):
                     try:
-                        filter_sql = f"""
-                            SELECT AI_FILTER(
-                                TO_FILE('{STAGE_NAME}', '{brow["IMAGE_PATH"]}'),
-                                '{filter_condition.replace("'", "''")}'
-                            ) AS IS_MATCH
-                        """
+                        filter_prompt = (
+                            "この広告バナー画像が以下の条件に該当するか判定してください。"
+                            "trueまたはfalseのみで回答してください。"
+                            f"条件: {escaped_cond}  画像: " + "{0}"
+                        ).replace("'", "''")
+                        filter_sql = (
+                            f"SELECT AI_COMPLETE('{LLM_MODEL}',"
+                            f" PROMPT('{filter_prompt}',"
+                            f" TO_FILE('{STAGE_NAME}', '{brow['IMAGE_PATH']}')"
+                            f")) AS IS_MATCH"
+                        )
                         f_res = session.sql(filter_sql).to_pandas()
-                        if f_res.iloc[0]["IS_MATCH"]:
+                        answer = f_res.iloc[0]["IS_MATCH"].strip().lower()
+                        if "true" in answer:
                             matched_banners.append(brow)
                     except Exception:
                         pass
