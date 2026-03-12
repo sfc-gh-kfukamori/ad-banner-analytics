@@ -40,6 +40,83 @@ KNOWLEDGE_STAGE = f"@{DB_SCHEMA}.KNOWLEDGE_DOCS"
 # --------------------------------------------------------------------------
 session = get_active_session()
 
+# --------------------------------------------------------------------------
+# カスタムCSS
+# --------------------------------------------------------------------------
+st.markdown("""
+<style>
+/* サンプル質問ボタン */
+div[data-testid="stHorizontalBlock"] button[kind="secondary"] {
+    font-size: 0.78rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    border: 1px solid #d0d5dd;
+    background: #f8f9fb;
+    color: #344054;
+    white-space: nowrap;
+}
+div[data-testid="stHorizontalBlock"] button[kind="secondary"]:hover {
+    background: #e8ecf1;
+    border-color: #98a2b3;
+}
+/* メトリクスカード */
+div[data-testid="stMetricValue"] {
+    font-size: 1.3rem;
+    font-weight: 700;
+}
+/* セクション間スペーシング */
+hr {
+    margin-top: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+/* キャンペーン情報カード */
+.campaign-card {
+    background: linear-gradient(135deg, #f0f4ff 0%, #faf5ff 100%);
+    border: 1px solid #e0e5f0;
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1rem;
+}
+.campaign-card h4 { margin: 0 0 0.5rem 0; color: #1a1a2e; }
+.campaign-card p { margin: 0.15rem 0; color: #4a4a6a; font-size: 0.9rem; }
+/* RAG結果カード */
+.rag-result {
+    background: #fafbfc;
+    border-left: 3px solid #6366f1;
+    border-radius: 0 0.5rem 0.5rem 0;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+}
+.rag-result .score {
+    display: inline-block;
+    background: #6366f1;
+    color: white;
+    border-radius: 0.75rem;
+    padding: 0.1rem 0.5rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+/* AI応答エリア */
+.ai-response {
+    background: linear-gradient(135deg, #f5f7ff 0%, #fefefe 100%);
+    border: 1px solid #e2e5f0;
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+    margin-top: 0.75rem;
+}
+/* サイドバー */
+section[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+}
+section[data-testid="stSidebar"] .stRadio label {
+    color: #e0e0e0 !important;
+}
+section[data-testid="stSidebar"] h2, section[data-testid="stSidebar"] header {
+    color: #ffffff !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 
 # --------------------------------------------------------------------------
 # ユーティリティ
@@ -1476,9 +1553,9 @@ def _display_analyst_result(result):
 # ページ5: 改善提案AIアドバイザー
 # ==========================================================================
 def page_advisor():
-    st.header("改善提案AIアドバイザー")
+    st.header("🤖 改善提案AIアドバイザー")
     st.caption(
-        "配信データとバナー属性を総合的に分析し、AI_COMPLETEで改善提案を生成します。"
+        "配信データとバナー属性を総合的に分析し、過去ナレッジを参照しながらAI_COMPLETEで改善提案を生成します。"
     )
 
     df_campaigns = load_campaigns()
@@ -1496,15 +1573,12 @@ def page_advisor():
     campaign_banners = df_banners[df_banners["CAMPAIGN_ID"] == selected_campaign]
     campaign_perf = df_bp[df_bp["CAMPAIGN_NAME"] == campaign_info["CAMPAIGN_NAME"]]
 
-    # キャンペーン概要表示
-    st.markdown(f"""
-    **キャンペーン情報:**
-    - 広告主: {campaign_info['ADVERTISER']} ({campaign_info['INDUSTRY']})
-    - 目的: {campaign_info['OBJECTIVE']}
-    - 期間: {campaign_info['START_DATE']} 〜 {campaign_info['END_DATE']}
-    - 予算: ¥{fmt_num(campaign_info['BUDGET_JPY'])}
-    - バナー数: {len(campaign_banners)}
-    """)
+    # キャンペーン概要表示（カードスタイル）
+    st.markdown(f"""<div class="campaign-card">
+<h4>{campaign_info['CAMPAIGN_NAME']}</h4>
+<p>📌 広告主: {campaign_info['ADVERTISER']} ({campaign_info['INDUSTRY']}) ／ 目的: {campaign_info['OBJECTIVE']}</p>
+<p>📅 期間: {campaign_info['START_DATE']} 〜 {campaign_info['END_DATE']} ／ 💰 予算: ¥{fmt_num(campaign_info['BUDGET_JPY'])} ／ 🖼️ バナー数: {len(campaign_banners)}</p>
+</div>""", unsafe_allow_html=True)
 
     # バナー別パフォーマンス表示（画像付き）
     if len(campaign_perf) > 0:
@@ -1534,6 +1608,21 @@ def page_advisor():
 
     # --- 自由記述の質問入力（RAG） ---
     st.divider()
+    st.markdown("##### 💡 質問・相談内容")
+
+    # サンプル質問ボタン
+    sample_advisor_qs = [
+        "CTAの色を暖色系に変えたらCVRは上がる？",
+        "モバイル向けの最適なレイアウトは？",
+        "予算配分をどう見直すべき？",
+        "A/Bテストで次に試すべきクリエイティブは？",
+        "競合と差別化できるデザイン要素は？",
+    ]
+    sq_cols = st.columns(len(sample_advisor_qs))
+    for idx_sq, sq in enumerate(sample_advisor_qs):
+        if sq_cols[idx_sq].button(sq, key=f"advisor_sq_{idx_sq}"):
+            st.session_state["advisor_question"] = sq
+
     advisor_question = st.text_area(
         "質問・相談したいこと（自由記述）",
         placeholder="例: CTAの色を暖色系に変えたらCVRは上がりますか？モバイル向けの最適なレイアウトは？予算配分をどう見直すべき？",
@@ -1558,10 +1647,21 @@ def page_advisor():
             knowledge_count = len(knowledge_results)
             if knowledge_results:
                 knowledge_text = format_knowledge_context(knowledge_results)
-                st.info(f"{knowledge_count}件の過去ナレッジを参照して提案を強化します")
+                st.info(f"📚 {knowledge_count}件の過去ナレッジを参照して提案を強化します")
                 with st.expander("参照ナレッジ一覧", expanded=False):
                     for r in knowledge_results:
-                        st.caption(f"- [{r.get('DOC_TITLE', '')}] {r.get('CHUNK_TEXT', '')[:80]}...")
+                        title = r.get("DOC_TITLE", "")
+                        chunk = r.get("CHUNK_TEXT", "")[:100]
+                        scores = r.get("@scores", {})
+                        sim = scores.get("cosine_similarity", 0)
+                        st.markdown(
+                            f'<div class="rag-result">'
+                            f'<span class="score">{sim:.3f}</span> '
+                            f'<strong>{title}</strong><br/>'
+                            f'<span style="color:#555;font-size:0.85rem;">{chunk}...</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
             else:
                 knowledge_text = ""
                 st.caption("関連する過去ナレッジが見つかりませんでした。一般的な知識で提案します。")
@@ -1603,8 +1703,11 @@ def page_advisor():
                 st.divider()
                 st.subheader("AI提案")
                 if knowledge_count > 0:
-                    st.caption(f"(過去ナレッジ{knowledge_count}件を参照)")
-                st.markdown(advice)
+                    st.caption(f"📚 過去ナレッジ{knowledge_count}件を参照")
+                st.markdown(
+                    f'<div class="ai-response">{advice}</div>',
+                    unsafe_allow_html=True,
+                )
 
                 # セッションに保存
                 if "advisor_history" not in st.session_state:
@@ -1698,18 +1801,31 @@ def _build_advisor_context(campaign_info, campaign_banners, campaign_perf):
 # ページ6: ナレッジベースRAG分析
 # ==========================================================================
 def page_knowledge_rag():
-    st.header("ナレッジベースRAG分析")
+    st.header("📚 ナレッジベースRAG分析")
     st.caption(
         "過去の社内分析レポートをCortex Searchで検索し、"
         "現在のキャンペーンデータと組み合わせてAI分析を行います。"
     )
 
-    tab1, tab2 = st.tabs(["ナレッジ検索", "ナレッジ強化アドバイザー"])
+    tab1, tab2 = st.tabs(["🔍 ナレッジ検索", "🧠 ナレッジ強化アドバイザー"])
 
     # --- タブ1: ナレッジ検索 ---
     with tab1:
         st.subheader("過去ナレッジ検索")
         st.caption("フリーテキストで過去の分析レポートから関連知見を検索します。")
+
+        # サンプル検索キーワード
+        sample_search_qs = [
+            "CTA色とCVR",
+            "季節クリエイティブ",
+            "A/Bテスト設計",
+            "リターゲティング",
+            "信頼バッジ効果",
+        ]
+        ssq_cols = st.columns(len(sample_search_qs))
+        for idx_ss, ss in enumerate(sample_search_qs):
+            if ssq_cols[idx_ss].button(ss, key=f"ks_sq_{idx_ss}"):
+                st.session_state["knowledge_search_query"] = ss
 
         search_query = st.text_input(
             "検索キーワード",
@@ -1726,7 +1842,7 @@ def page_knowledge_rag():
                     results = search_knowledge_base(search_query, limit=search_limit)
 
                 if results:
-                    st.success(f"{len(results)}件のナレッジが見つかりました")
+                    st.success(f"📚 {len(results)}件のナレッジが見つかりました")
                     for i, r in enumerate(results, 1):
                         title = r.get("DOC_TITLE", "不明")
                         filename = r.get("DOC_FILENAME", "")
@@ -1735,7 +1851,13 @@ def page_knowledge_rag():
                         similarity = scores.get("cosine_similarity", 0)
 
                         with st.expander(f"#{i} [{title}] (類似度: {similarity:.3f})", expanded=(i <= 2)):
-                            st.caption(f"ファイル: {filename}")
+                            st.markdown(
+                                f'<div class="rag-result">'
+                                f'<span class="score">{similarity:.3f}</span> '
+                                f'<strong>{title}</strong> &mdash; <em style="font-size:0.8rem;color:#888;">{filename}</em>'
+                                f'</div>',
+                                unsafe_allow_html=True,
+                            )
                             st.markdown(text.replace("\\n", "\n"))
                 else:
                     st.info("該当するナレッジが見つかりませんでした。")
@@ -1764,14 +1886,25 @@ def page_knowledge_rag():
         campaign_banners = df_banners[df_banners["CAMPAIGN_ID"] == selected_campaign]
         campaign_perf = df_bp[df_bp["CAMPAIGN_NAME"] == campaign_info["CAMPAIGN_NAME"]]
 
-        # キャンペーン概要表示
-        st.markdown(f"""
-**キャンペーン情報:**
-- 広告主: {campaign_info['ADVERTISER']} ({campaign_info['INDUSTRY']})
-- 目的: {campaign_info['OBJECTIVE']}
-- 期間: {campaign_info['START_DATE']} 〜 {campaign_info['END_DATE']}
-- バナー数: {len(campaign_banners)}
-        """)
+        # キャンペーン概要表示（カードスタイル）
+        st.markdown(f"""<div class="campaign-card">
+<h4>{campaign_info['CAMPAIGN_NAME']}</h4>
+<p>📌 広告主: {campaign_info['ADVERTISER']} ({campaign_info['INDUSTRY']}) ／ 目的: {campaign_info['OBJECTIVE']}</p>
+<p>📅 期間: {campaign_info['START_DATE']} 〜 {campaign_info['END_DATE']} ／ 🖼️ バナー数: {len(campaign_banners)}</p>
+</div>""", unsafe_allow_html=True)
+
+        # サンプル質問ボタン
+        st.markdown("##### 💡 質問・分析内容")
+        sample_rag_qs = [
+            "過去に同業界で成功したCTA施策は？",
+            "地域ターゲティングの最適な戦略は？",
+            "CPA改善に効果的だった施策は？",
+            "次のA/Bテスト計画を提案して",
+        ]
+        srq_cols = st.columns(len(sample_rag_qs))
+        for idx_sr, sr in enumerate(sample_rag_qs):
+            if srq_cols[idx_sr].button(sr, key=f"rag_sq_{idx_sr}"):
+                st.session_state["rag_user_question"] = sr
 
         # 自由記述の質問入力
         user_question = st.text_area(
@@ -1793,10 +1926,21 @@ def page_knowledge_rag():
                 knowledge_context = format_knowledge_context(knowledge_results)
 
             if knowledge_results:
-                st.info(f"{len(knowledge_results)}件の過去ナレッジを参照します")
+                st.info(f"📚 {len(knowledge_results)}件の過去ナレッジを参照します")
                 with st.expander("参照ナレッジ一覧", expanded=False):
                     for r in knowledge_results:
-                        st.caption(f"- [{r.get('DOC_TITLE', '')}] {r.get('CHUNK_TEXT', '')[:80]}...")
+                        title = r.get("DOC_TITLE", "")
+                        chunk = r.get("CHUNK_TEXT", "")[:100]
+                        scores = r.get("@scores", {})
+                        sim = scores.get("cosine_similarity", 0)
+                        st.markdown(
+                            f'<div class="rag-result">'
+                            f'<span class="score">{sim:.3f}</span> '
+                            f'<strong>{title}</strong><br/>'
+                            f'<span style="color:#555;font-size:0.85rem;">{chunk}...</span>'
+                            f'</div>',
+                            unsafe_allow_html=True,
+                        )
 
             with st.spinner("Step 2/3: キャンペーンデータを収集中..."):
                 campaign_context = _build_advisor_context(campaign_info, campaign_banners, campaign_perf)
@@ -1832,7 +1976,10 @@ def page_knowledge_rag():
 
                     st.divider()
                     st.subheader("ナレッジ強化AI分析結果")
-                    st.markdown(advice)
+                    st.markdown(
+                        f'<div class="ai-response">{advice}</div>',
+                        unsafe_allow_html=True,
+                    )
 
                     # セッションに保存
                     if "rag_history" not in st.session_state:
@@ -1869,29 +2016,35 @@ with st.sidebar:
     page = st.radio(
         "ページ選択",
         [
-            "ダッシュボード概要",
-            "A/Bテスト分析",
-            "AI画像分析",
-            "自然言語クエリ",
-            "改善提案AIアドバイザー",
-            "ナレッジベースRAG分析",
+            "📊 ダッシュボード概要",
+            "🔬 A/Bテスト分析",
+            "🎨 AI画像分析",
+            "💬 自然言語クエリ",
+            "🤖 改善提案AIアドバイザー",
+            "📚 ナレッジベースRAG分析",
         ],
         index=0,
     )
 
     st.divider()
-    st.caption(f"DB: {DB_SCHEMA}")
-    st.caption(f"LLM: {LLM_MODEL}")
+    st.caption(f"🗄️ {DB_SCHEMA}")
+    st.caption(f"🧠 {LLM_MODEL}")
+    st.divider()
+    st.markdown(
+        "<div style='text-align:center;color:#667;font-size:0.72rem;'>"
+        "Powered by <b>Snowflake Cortex AI</b></div>",
+        unsafe_allow_html=True,
+    )
 
-if page == "ダッシュボード概要":
+if page == "📊 ダッシュボード概要":
     page_dashboard()
-elif page == "A/Bテスト分析":
+elif page == "🔬 A/Bテスト分析":
     page_ab_test()
-elif page == "AI画像分析":
+elif page == "🎨 AI画像分析":
     page_ai_image()
-elif page == "自然言語クエリ":
+elif page == "💬 自然言語クエリ":
     page_nl_query()
-elif page == "改善提案AIアドバイザー":
+elif page == "🤖 改善提案AIアドバイザー":
     page_advisor()
-elif page == "ナレッジベースRAG分析":
+elif page == "📚 ナレッジベースRAG分析":
     page_knowledge_rag()
